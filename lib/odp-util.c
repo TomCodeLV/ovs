@@ -177,6 +177,7 @@ ovs_key_attr_to_string(enum ovs_key_attr attr, char *namebuf, size_t bufsize)
     case OVS_KEY_ATTR_ETHERTYPE: return "eth_type";
     case OVS_KEY_ATTR_IPV4: return "ipv4";
     case OVS_KEY_ATTR_IPV6: return "ipv6";
+    case OVS_KEY_ATTR_IPV6_EXTHDRS: return "ipv6_exthdrs";
     case OVS_KEY_ATTR_TCP: return "tcp";
     case OVS_KEY_ATTR_TCP_FLAGS: return "tcp_flags";
     case OVS_KEY_ATTR_UDP: return "udp";
@@ -2706,6 +2707,7 @@ const struct attr_len_tbl ovs_flow_key_attr_lens[OVS_KEY_ATTR_MAX + 1] = {
     [OVS_KEY_ATTR_NSH]       = { .len = ATTR_LEN_NESTED,
                                  .next = ovs_nsh_key_attr_lens,
                                  .next_max = OVS_NSH_KEY_ATTR_MAX },
+    [OVS_KEY_ATTR_IPV6_EXTHDRS] = { .len = sizeof(struct ovs_key_ipv6_exthdrs) },
 };
 
 /* Returns the correct length of the payload for a flow key attribute of the
@@ -3247,6 +3249,7 @@ odp_mask_is_constant__(enum ovs_key_attr attr, const void *mask, size_t size,
     case OVS_KEY_ATTR_CT_ZONE:
     case OVS_KEY_ATTR_CT_MARK:
     case OVS_KEY_ATTR_CT_LABELS:
+    case OVS_KEY_ATTR_IPV6_EXTHDRS:
     case OVS_KEY_ATTR_PACKET_TYPE:
     case OVS_KEY_ATTR_NSH:
         return is_all_byte(mask, size, u8);
@@ -3490,6 +3493,23 @@ format_u8u(struct ds *ds, const char *name, uint8_t key,
         ds_put_format(ds, "%s=%"PRIu8, name, key);
         if (!mask_full) { /* Partially masked. */
             ds_put_format(ds, "/%#"PRIx8, *mask);
+        }
+        ds_put_char(ds, ',');
+    }
+}
+
+static void
+format_u16u(struct ds *ds, const char *name, uint16_t key,
+           const uint16_t *mask, bool verbose)
+{
+    bool mask_empty = mask && !*mask;
+
+    if (verbose || !mask_empty) {
+        bool mask_full = !mask || *mask == UINT16_MAX;
+
+        ds_put_format(ds, "%s=%"PRIu16, name, key);
+        if (!mask_full) { /* Partially masked. */
+            ds_put_format(ds, "/%#"PRIx16, *mask);
         }
         ds_put_char(ds, ',');
     }
@@ -4281,6 +4301,14 @@ format_odp_key_attr__(const struct nlattr *a, const struct nlattr *ma,
                    verbose);
         format_frag(ds, "frag", key->ipv6_frag, MASK(mask, ipv6_frag),
                     verbose);
+        ds_chomp(ds, ',');
+        break;
+    }
+    case OVS_KEY_ATTR_IPV6_EXTHDRS: {
+        const struct ovs_key_ipv6_exthdrs *key = nl_attr_get(a);
+        const struct ovs_key_ipv6_exthdrs *mask = ma ? nl_attr_get(ma) : NULL;
+
+        format_u16u(ds, "exthdrs", key->hdrs, MASK(mask, hdrs), verbose);
         ds_chomp(ds, ',');
         break;
     }
@@ -6105,6 +6133,10 @@ static void get_ipv6_key(const struct flow *, struct ovs_key_ipv6 *,
                          bool is_mask);
 static void put_ipv6_key(const struct ovs_key_ipv6 *, struct flow *,
                          bool is_mask);
+static void get_ipv6_exthdrs_key(const struct flow *,
+                                 struct ovs_key_ipv6_exthdrs *);
+static void put_ipv6_exthdrs_key(const struct ovs_key_ipv6_exthdrs *,
+                                 struct flow *);
 static void get_arp_key(const struct flow *, struct ovs_key_arp *);
 static void put_arp_key(const struct ovs_key_arp *, struct flow *);
 static void get_nd_key(const struct flow *, struct ovs_key_nd *);
@@ -6131,7 +6163,7 @@ odp_flow_key_from_flow__(const struct odp_flow_key_parms *parms,
     /* New "struct flow" fields that are visible to the datapath (including all
      * data fields) should be translated into equivalent datapath flow fields
      * here (you will have to add a OVS_KEY_ATTR_* for them). */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 42);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 43);
 
     struct ovs_key_ethernet *eth_key;
     size_t encap[FLOW_MAX_VLAN_HEADERS] = {0};
@@ -6277,6 +6309,16 @@ odp_flow_key_from_flow__(const struct odp_flow_key_parms *parms,
         ipv6_key = nl_msg_put_unspec_uninit(buf, OVS_KEY_ATTR_IPV6,
                                             sizeof *ipv6_key);
         get_ipv6_key(data, ipv6_key, export_mask);
+
+        if (parms->support.ipv6_exthdrs) {
+            struct ovs_key_ipv6_exthdrs *ipv6_exthdrs_key;
+
+            ipv6_exthdrs_key =
+                    nl_msg_put_unspec_uninit(buf, OVS_KEY_ATTR_IPV6_EXTHDRS,
+                                             sizeof *ipv6_exthdrs_key);
+
+            get_ipv6_exthdrs_key(data, ipv6_exthdrs_key);
+        }
     } else if (flow->dl_type == htons(ETH_TYPE_ARP) ||
                flow->dl_type == htons(ETH_TYPE_RARP)) {
         struct ovs_key_arp *arp_key;
@@ -6550,6 +6592,7 @@ odp_key_to_dp_packet(const struct nlattr *key, size_t key_len,
         case OVS_KEY_ATTR_VLAN:
         case OVS_KEY_ATTR_IPV4:
         case OVS_KEY_ATTR_IPV6:
+        case OVS_KEY_ATTR_IPV6_EXTHDRS:
         case OVS_KEY_ATTR_TCP:
         case OVS_KEY_ATTR_UDP:
         case OVS_KEY_ATTR_ICMP:
@@ -6921,6 +6964,18 @@ parse_l2_5_onward(const struct nlattr *attrs[OVS_KEY_ATTR_MAX + 1],
                 expected_bit = OVS_KEY_ATTR_IPV6;
             }
         }
+        if (present_attrs & (UINT64_C(1) << OVS_KEY_ATTR_IPV6_EXTHDRS)) {
+            const struct ovs_key_ipv6_exthdrs *ipv6_exthdrs_key;
+
+            ipv6_exthdrs_key = nl_attr_get(attrs[OVS_KEY_ATTR_IPV6_EXTHDRS]);
+            put_ipv6_exthdrs_key(ipv6_exthdrs_key, flow);
+
+            if (is_mask) {
+                check_start = ipv6_exthdrs_key;
+                check_len = sizeof *ipv6_exthdrs_key;
+                expected_bit = OVS_KEY_ATTR_IPV6_EXTHDRS;
+            }
+        }
     } else if (src_flow->dl_type == htons(ETH_TYPE_ARP) ||
                src_flow->dl_type == htons(ETH_TYPE_RARP)) {
         if (!is_mask) {
@@ -7237,7 +7292,7 @@ odp_flow_key_to_flow__(const struct nlattr *key, size_t key_len,
     /* New "struct flow" fields that are visible to the datapath (including all
      * data fields) should be translated from equivalent datapath flow fields
      * here (you will have to add a OVS_KEY_ATTR_* for them).  */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 42);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 43);
 
     enum odp_key_fitness fitness = ODP_FIT_ERROR;
     if (errorp) {
@@ -8034,6 +8089,44 @@ commit_set_ipv6_action(const struct flow *flow, struct flow *base_flow,
 }
 
 static void
+get_ipv6_exthdrs_key(const struct flow *flow,
+                     struct ovs_key_ipv6_exthdrs *ipv6_exthdrs)
+{
+    ipv6_exthdrs->hdrs = flow->ipv6_exthdr;
+}
+
+static void
+put_ipv6_exthdrs_key(const struct ovs_key_ipv6_exthdrs *ipv6_exthdrs,
+                     struct flow *flow)
+{
+    flow->ipv6_exthdr = ipv6_exthdrs->hdrs;
+}
+
+static void
+commit_set_ipv6_exthdrs_action(const struct flow *flow, struct flow *base_flow,
+                       struct ofpbuf *odp_actions, struct flow_wildcards *wc,
+                       bool use_masked)
+{
+    struct ovs_key_ipv6_exthdrs key, mask, orig_mask, base;
+    struct offsetof_sizeof ovs_key_ipv6_exthdrs_offsetof_sizeof_arr[] =
+            OVS_KEY_IPV6_EXTHDRS_OFFSETOF_SIZEOF_ARR;
+
+    get_ipv6_exthdrs_key(flow, &key);
+    get_ipv6_exthdrs_key(base_flow, &base);
+    get_ipv6_exthdrs_key(&wc->masks, &mask);
+    memcpy(&orig_mask, &mask, sizeof mask);
+    mask.hdrs = 0;
+
+    if (commit(OVS_KEY_ATTR_IPV6_EXTHDRS, use_masked, &key, &base, &mask,
+               sizeof key, ovs_key_ipv6_exthdrs_offsetof_sizeof_arr,
+               odp_actions)) {
+        put_ipv6_exthdrs_key(&base, base_flow);
+        or_masks(&mask, &orig_mask, ovs_key_ipv6_exthdrs_offsetof_sizeof_arr);
+        put_ipv6_exthdrs_key(&mask, &wc->masks);
+    }
+}
+
+static void
 get_arp_key(const struct flow *flow, struct ovs_key_arp *arp)
 {
     /* ARP key has padding, clear it. */
@@ -8234,6 +8327,8 @@ commit_set_nw_action(const struct flow *flow, struct flow *base,
 
     case ETH_TYPE_IPV6:
         commit_set_ipv6_action(flow, base, odp_actions, wc, use_masked);
+        commit_set_ipv6_exthdrs_action(flow, base, odp_actions, wc,
+                                       use_masked);
         if (base->nw_proto == IPPROTO_ICMPV6) {
             /* Commit extended attrs first to make sure
                correct options are added.*/
@@ -8622,7 +8717,7 @@ commit_odp_actions(const struct flow *flow, struct flow *base,
     /* If you add a field that OpenFlow actions can change, and that is visible
      * to the datapath (including all data fields), then you should also add
      * code here to commit changes to the field. */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 42);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 43);
 
     enum slow_path_reason slow1, slow2;
     bool mpls_done = false;
