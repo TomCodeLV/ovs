@@ -104,6 +104,7 @@ utilities/bugtool/ovs-bugtool.8: \
 utilities/bugtool/ovs-bugtool.8.in:
 lib/ovs.tmac:
 
+
 utilities/ovs-dpctl-top.8: \
 	utilities/ovs-dpctl-top.8.in \
 	lib/ovs.tmac
@@ -152,6 +153,8 @@ utilities/ovs-pcap.1: \
 utilities/ovs-pcap.1.in:
 lib/common-syn.man:
 lib/common.man:
+lib/ovs.tmac:
+
 lib/ovs.tmac:
 
 utilities/ovs-testcontroller.8: \
