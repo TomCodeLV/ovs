@@ -365,7 +365,7 @@ void get_ipv6_ext_hdrs(struct sk_buff *skb, struct ipv6hdr *nh, u16 *ext_hdrs)
 				if (*ext_hdrs & OFPIEH12_HOP) {
 					*ext_hdrs |= OFPIEH12_UNREP;
 				}
-				/**
+				/*
 				 * OFPIEH12_HOP is set to 1 if a hop-by-hop IPv6 extension
 				 * header is present as the first extension header in the
 				 * packet.

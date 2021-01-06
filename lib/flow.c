@@ -569,7 +569,9 @@ parse_ipv6_ext_hdrs(const void **datap, size_t *sizep, uint8_t *nw_proto,
 uint16_t
 ipv6_ext_header_size__(uint8_t header_type, uint8_t len)
 {
-    // Authentication header has different size calculation
+    /*
+     * Authentication header has different size calculation
+     */
     if (header_type == IPPROTO_AH) {
         return (len + 2) << 2;
     } else {
@@ -577,7 +579,8 @@ ipv6_ext_header_size__(uint8_t header_type, uint8_t len)
     }
 }
 
-/* Parses packet and sets IPv6 extension header flags.
+/**
+ * Parses packet and sets IPv6 extension header flags.
  *
  * datap        pointer where extension header data starts in packet
  * nh           ipv6 header
@@ -613,12 +616,14 @@ get_ipv6_ext_hdrs(const void *datap, const struct ovs_16aligned_ip6_hdr *nh,
     *ext_hdrs = 0;
 
     while (true) {
-        // following switch code is identical to kernel datapath/flow.c
-        // get_ipv6_ext_hdrs() switch code
+        /*
+         * following switch code is identical to kernel datapath/flow.c
+         * get_ipv6_ext_hdrs() switch code
+         */
         switch (next_type) {
             case IPPROTO_NONE:
                 *ext_hdrs |= OFPIEH12_NONEXT;
-                // stop parsing
+                /* stop parsing */
                 return;
 
             case IPPROTO_ESP:
@@ -691,9 +696,11 @@ get_ipv6_ext_hdrs(const void *datap, const struct ovs_16aligned_ip6_hdr *nh,
                 if (*ext_hdrs & OFPIEH12_HOP) {
                     *ext_hdrs |= OFPIEH12_UNREP;
                 }
-                // OFPIEH12_HOP is set to 1 if a hop-by-hop IPv6 extension
-                // header is present as the first extension header in the
-                // packet.
+                /*
+                 * OFPIEH12_HOP is set to 1 if a hop-by-hop IPv6 extension
+                 * header is present as the first extension header in the
+                 * packet.
+                 */
                 if (*ext_hdrs == 0) {
                     *ext_hdrs |= OFPIEH12_HOP;
                 } else {
