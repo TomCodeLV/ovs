@@ -1433,7 +1433,7 @@ void
 mf_set_flow_value(const struct mf_field *mf,
                   const union mf_value *value, struct flow *flow)
 {
-    switch (mf->id) { ////
+    switch (mf->id) {
     case MFF_DP_HASH:
         flow->dp_hash = ntohl(value->be32);
         break;
