@@ -30,6 +30,7 @@
 #include "colors.h"
 #include "coverage.h"
 #include "csum.h"
+#include "openflow/openflow.h"
 #include "openvswitch/dynamic-string.h"
 #include "hash.h"
 #include "jhash.h"
@@ -44,7 +45,6 @@
 #include "openvswitch/nsh.h"
 #include "ovs-router.h"
 #include "lib/netdev-provider.h"
-#include "openflow/openflow.h"
 
 COVERAGE_DEFINE(flow_extract);
 COVERAGE_DEFINE(miniflow_malloc);
