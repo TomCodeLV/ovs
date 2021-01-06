@@ -252,7 +252,8 @@ static bool icmphdr_ok(struct sk_buff *skb)
 				  sizeof(struct icmphdr));
 }
 
-/* Parses packet and sets IPv6 extension header flags.
+/**
+ * Parses packet and sets IPv6 extension header flags.
  *
  * skb          buffer where extension header data starts in packet
  * nh           ipv6 header
@@ -291,7 +292,7 @@ void get_ipv6_ext_hdrs(struct sk_buff *skb, struct ipv6hdr *nh, u16 *ext_hdrs)
 		switch (next_type) {
 			case IPPROTO_NONE:
 				*ext_hdrs |= OFPIEH12_NONEXT;
-				// stop parsing
+				/* stop parsing */
 				return;
 
 			case IPPROTO_ESP:
@@ -364,9 +365,11 @@ void get_ipv6_ext_hdrs(struct sk_buff *skb, struct ipv6hdr *nh, u16 *ext_hdrs)
 				if (*ext_hdrs & OFPIEH12_HOP) {
 					*ext_hdrs |= OFPIEH12_UNREP;
 				}
-				// OFPIEH12_HOP is set to 1 if a hop-by-hop IPv6 extension
-				// header is present as the first extension header in the
-				// packet.
+				/**
+				 * OFPIEH12_HOP is set to 1 if a hop-by-hop IPv6 extension
+				 * header is present as the first extension header in the
+				 * packet.
+				 */
 				if (*ext_hdrs == 0) {
 					*ext_hdrs |= OFPIEH12_HOP;
 				} else {
@@ -382,7 +385,7 @@ void get_ipv6_ext_hdrs(struct sk_buff *skb, struct ipv6hdr *nh, u16 *ext_hdrs)
 		if (hp == NULL)
 			break;
 		next_type = hp->nexthdr;
-		start += ipv6_optlen(hp); // ipv6_authlen
+		start += ipv6_optlen(hp); /* TODO: ipv6_authlen */
 	};
 }
 
