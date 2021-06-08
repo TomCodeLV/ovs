@@ -39,6 +39,8 @@
 # specify the "--with autoenable"
 %bcond_with autoenable
 
+%undefine _missing_build_ids_terminate_build
+
 # Enable PIE, bz#955181
 %global _hardened_build 1
 

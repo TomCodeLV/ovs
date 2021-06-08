@@ -58,6 +58,9 @@ $(srcdir)/rhel/openvswitch.spec: rhel/openvswitch.spec.in $(top_builddir)/config
 $(srcdir)/rhel/openvswitch-fedora.spec: rhel/openvswitch-fedora.spec.in $(top_builddir)/config.status
 	$(update_rhel_spec)
 
+$(srcdir)/rhel/openvswitch-suse.spec: rhel/openvswitch-suse.spec.in $(top_builddir)/config.status
+	$(update_rhel_spec)
+
 RPMBUILD_TOP := $(abs_top_builddir)/rpm/rpmbuild
 RPMBUILD_OPT ?= --without check
 
